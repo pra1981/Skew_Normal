@@ -1,0 +1,40 @@
+#
+#	LineProfile analysis configuration file
+#
+# Please specify the parameters below by including the appropriate 
+# string or value before the "#" character. Then run the program by typing   
+# 
+#	python LineProf.py
+#
+# Do not modify the structure of this file. For detailed info on each parameter
+# refer to the README file.
+#
+#
+#
+/Users/xavierdumusque/uni/phd/program/skewness_CCF/data/HD10700_ccf/HD10700_CCF.txt		# observation list 		(1)
+HARPS					# type of files in obs. list 	(2)
+1					# BIS selector 			(3)
+1					# BISminus selector 		(3)
+1					# BISplus selector 		(3)
+1					# BiGauss selector		(3)
+1					# Vasy selector			(3)
+1					# Vspan selector		(3)
+1					# FWHM analysis selector	(3)
+None					# external RV values		(4)
+#
+#
+#
+# (1) - text file with list of observations to be processed. Each line 
+#	corresponds to the full path an observation to be processed. 
+#
+# (2) - type of files discriminated in observation list. The accepted types are
+#	"HARPS", "HARPS-N", "SOAP", "ASCII", and "rdb". 
+#
+# (3) - "1"/"0" toggle analysis of the different indicators (on/off, resp.). 
+#
+# (4) - file with RVs or KW with RV value used instead of center of Gaussian 
+# 	function fitting. 
+#	
+# Note: To test the application to HARPS data you can use the list
+#	testdata/HARPS-HD224789/HARPS_example.txt 
+#

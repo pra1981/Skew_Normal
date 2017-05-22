@@ -18,6 +18,7 @@ import functions
 import pyfits
 import pandas
 import planet
+import fit2
 
 ########################################################
 #para
@@ -53,6 +54,8 @@ for star in stars:
     data_Pedro['jdb'] = data_Pedro['jdb'].round(6)
     if star != 'HD128621':
         data_Umberto[['vrad','bis_span','fwhm']] *= 1000.
+    else:
+        data_Umberto[['bis_span','fwhm']] *= 1000.
     data_DRS[['vrad','bis_span','fwhm']] *= 1000.
     data_Pedro[['vrad','bis_span','fwhm']] *= 1000.
     
@@ -118,6 +121,8 @@ for star in stars:
     semilogx(1./perio[0],perio[1])
     ylabel('Normalized Power')
     xlabel('Period [d]')
+
+#    savefig('../figures/RV_vs_time_%s.pdf' % star)
 
     figure()
     para = ['vrad','bis_span']
@@ -185,6 +190,64 @@ for star in stars:
 
     savefig('../figures/Comparison_para_%s.pdf' % star)
 
+
+    Matrice = dstack([data_Umberto['bis_span'],data_Umberto['fwhm']])
+    para1,sig_para1,mod1,chisq1 = fit2.linlsq(Matrice[0],array(data_Umberto['vrad']),array(data_DRS['svrad']))
+    Umberto_activity_corr = sum([Matrice[0][:,i] * para1[i] for i in arange(len(para1))],0)
+
+    Matrice = dstack([data_DRS['bis_span'],data_DRS['fwhm']])
+    para1,sig_para1,mod1,chisq1 = fit2.linlsq(Matrice[0],array(data_DRS['vrad']),array(data_DRS['svrad']))
+    DRS_activity_corr = sum([Matrice[0][:,i] * para1[i] for i in arange(len(para1))],0)
+
+    figure()
+    subplot(221)
+    title(star +', SN RV : std=%.2f m/s' % std(data_Umberto['vrad']))
+    plot(data_Umberto['jdb'],data_Umberto['vrad'],'o')
+    ylabel('RV [m/s]')
+    subplot(223)
+    title('SN RV activity corr (SN RV - x*SN BIS - y*SN FWHM): std=%.2f m/s' % std(data_Umberto['vrad']-Umberto_activity_corr))
+    plot(data_Umberto['jdb'],data_Umberto['vrad']-Umberto_activity_corr,'o')
+    ylabel('RV [m/s]')
+    xlabel('JD - 2400000 [d]')
+
+    subplot(222)
+    title('RV : std=%.2f m/s' % std(data_DRS['vrad']))
+    plot(data_DRS['jdb'],data_DRS['vrad'],'o')
+    subplot(224)
+    title('RV activity corr (RV - x*BIS - y*FWHM): std=%.2f m/s' % std(data_DRS['vrad']-DRS_activity_corr))
+    plot(data_DRS['jdb'],data_DRS['vrad']-DRS_activity_corr,'o')
+    xlabel('JD - 2400000 [d]')
+
+    savefig('../figures/Correction activity_%s.pdf' % star)
+
+
+    figure()
+    subplot(121)
+    hist(data_Umberto['bis_span'],bins=100,label='SN')
+    hist(data_DRS['bis_span'],bins=100,alpha=0.5,label='Normal')
+    xlabel('bis span')
+    legend()
+    subplot(122)
+    hist(data_Umberto['fwhm'],bins=100,label='SN')
+    hist(data_DRS['fwhm'],bins=100,alpha=0.5,label='Normal')
+    xlabel('fwhm')
+    legend()
+
+#   # Tried to remove the difference in velocity between Normal and Skew Normal, but it does not work
+#    Matrice = dstack([array(data_Umberto['vrad']-data_DRS['vrad'])])
+#    para1,sig_para1,mod1,chisq1 = fit2.linlsq(Matrice[0],array(data_DRS['vrad']),array(data_DRS['svrad']))
+#    new_activity_corr = sum([Matrice[0][:,i] * para1[i] for i in arange(len(para1))],0)
+#
+#    figure()
+#    subplot(211)
+#    title('RV : std=%.2f m/s' % std(data_DRS['vrad']))
+#    plot(data_DRS['jdb'],data_DRS['vrad'],'o')
+#    ylabel('RV [m/s]')
+#    subplot(212)
+#    title('RV activity corr (SN RV - x*(SN_RV - RV)): std=%.2f m/s' % std(data_DRS['vrad']-new_activity_corr))
+#    plot(data_DRS['jdb'],data_DRS['vrad']-new_activity_corr,'o')
+#    ylabel('RV [m/s]')
+#    xlabel('JD - 2400000 [d]')
 
 
 

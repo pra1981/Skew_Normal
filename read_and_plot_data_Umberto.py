@@ -17,16 +17,22 @@ import pyrdb
 import functions
 import pyfits
 import pandas
+import planet
 
 ########################################################
 #para
 ########################################################
 
-stars = ['LRa01_E2_0165','HD192310','HD215152','HD128621','HD10700']
+stars = ['LRa01_E2_0165','HD192310','HD215152','HD128621']
 
 path_dbase = '/Users/xavierdumusque/uni/phd/data/dbase/stars/'
-path_data_Umberto = '../data/skew_normal/'
+path_data_Umberto = '../data/'
 path_data_Pedro = 'pedrofigueira-line-profile-indicators/results/'
+
+# From the Pepe paper, we only have lambda, the mean longitude
+# Time of passage at periastron = epoch - (lambda - omega)/360*P = epoch - M/360*P = 2455151.02574596-(340.8-173)/360*74.72, where M is the mean anomalie
+#planets = {'LRa01_E2_0165':[[3.42,0.85359165,4398.21,0.12,160*pi/180],[6.01,3.70,55953.3,0.12,160*pi/180]],'HD192310':[[3,74.72,55116.20,0.13,173*pi/180.],[2.27,525.8,55312,0.32,110*pi/180.]],'HD215152':[],'HD128621':[]}
+planets = {'LRa01_E2_0165':[],'HD192310':[],'HD215152':[],'HD128621':[]}
 
 ########################################################
 #read FITS files in 2010
@@ -39,24 +45,79 @@ for star in stars:
     file_Pedro = glob.glob(path_data_Pedro+star+'/WrapUp_*.txt')[0]
     data_Pedro = pandas.read_csv(file_Pedro,sep='\t\t',skiprows=[0,1],names=['file_root','jdb','vrad','bis_span','bis-','bis+','biGauss','Vasy','Vspan','fwhm'],engine='python')
 
-    data_Umberto['jdb'] -= 2400000
+    if star != 'HD128621':
+        data_Umberto['jdb'] -= 2400000
     data_Pedro['jdb'] -= 2400000
-    data_Umberto[['vrad','bis_span','fwhm']] *= 1000.
+    data_DRS['jdb'] = data_DRS['jdb'].round(6)
+    data_Umberto['jdb'] = data_Umberto['jdb'].round(6)
+    data_Pedro['jdb'] = data_Pedro['jdb'].round(6)
+    if star != 'HD128621':
+        data_Umberto[['vrad','bis_span','fwhm']] *= 1000.
     data_DRS[['vrad','bis_span','fwhm']] *= 1000.
     data_Pedro[['vrad','bis_span','fwhm']] *= 1000.
-
-    data_Umberto[['vrad','bis_span','fwhm']] -= data_Umberto[['vrad','bis_span','fwhm']].mean()
-    data_DRS[['vrad','bis_span','fwhm']] -= data_DRS[['vrad','bis_span','fwhm']].mean()
-    data_Pedro[['vrad','bis_span','fwhm']] -= data_Pedro[['vrad','bis_span','fwhm']].mean()
     
+    if star == 'HD128621':
+        data_DRS['vrad'] -= (-22700.1747 - 0.5307 * (data_DRS['jdb'] - 55279.109840075726) - 1.83e-5 * (data_DRS['jdb'] - 55279.109840075726)**2)
+        data_Pedro['vrad'] -= (-22700.1747 - 0.5307 * (data_Pedro['jdb'] - 55279.109840075726) - 1.83e-5 * (data_Pedro['jdb'] - 55279.109840075726)**2)
+    
+    data = data_DRS.merge(data_Umberto,on='jdb',how='inner')
+    data = data.merge(data_Pedro,on='jdb',how='inner')
+    data = data.loc[data['jdb'] < 57174.5] #remove new fibers
+
+    data_DRS = data_DRS.loc[data_DRS['jdb'].isin(data['jdb'])]
+    data_Umberto = data_Umberto.loc[data_Umberto['jdb'].isin(data['jdb'])]
+    data_Pedro = data_Pedro.loc[data_Pedro['jdb'].isin(data['jdb'])]
+
+    data_Umberto[['vrad','bis_span','fwhm']] -= data_Umberto[['vrad','bis_span','fwhm']].median()
+    data_DRS[['vrad','bis_span','fwhm']] -= data_DRS[['vrad','bis_span','fwhm']].median()
+    data_Pedro[['vrad','bis_span','fwhm']] -= data_Pedro[['vrad','bis_span','fwhm']].median()
+
+    if star=='HD128621':
+        data_Umberto = data_Umberto.loc[abs(data_Umberto['vrad']) < 20]
+    elif star == 'HD215152':
+        data_Umberto = data_Umberto.loc[abs(data_Umberto['vrad']) < 8]
+    elif star=='HD192310':
+        data_Umberto = data_Umberto.loc[abs(data_Umberto['vrad']) < 20]
+        data_DRS = data_DRS.loc[abs(data_DRS['vrad']) < 20]
+
+    data = data_DRS.merge(data_Umberto,on='jdb',how='inner')
+    data = data.merge(data_Pedro,on='jdb',how='inner')
+
+    data_DRS = data_DRS.loc[data_DRS['jdb'].isin(data['jdb'])]
+    data_Umberto = data_Umberto.loc[data_Umberto['jdb'].isin(data['jdb'])]
+    data_Pedro = data_Pedro.loc[data_Pedro['jdb'].isin(data['jdb'])]
+
+    vrad_planet = zeros(len(data))
+    for i,pl in enumerate(planets[star]):
+        vrad_planet += planet.get_vrad_planet(data_DRS['jdb'],0,pl[0],pl[1],pl[2],time='periastron',e=pl[3],omega=pl[4],output='0',step_jdb_continuous=1.)
+
+    data_DRS['vrad'] -= vrad_planet
+    data_Umberto['vrad'] -= vrad_planet
+    data_Pedro['vrad'] -= vrad_planet
+
+    rcParams['figure.figsize'] = [15,8]
+
     figure()
     subplot(311)
-    plot(data_DRS['jdb'],data_DRS['vrad'])
+    title(star)
+    errorbar(data_DRS['jdb'],data_DRS['vrad'],data_DRS['svrad'],marker='o',ls='',zorder=0)
+    scatter(data_DRS['jdb'],data_DRS['vrad'],c=data_DRS['sn50'],zorder=1)
+    ylabel('DRS RV [m/s]')
+    cb=colorbar()
+    cb.set_label('SNR order 50')
     ax=gca()
     subplot(312,sharex=ax)
-    plot(data_Umberto['jdb'],data_Umberto['vrad'])
-    subplot(313,sharex=ax)
-    plot(data_Pedro['jdb'],data_Pedro['vrad'])
+    errorbar(data_Umberto['jdb'],data_Umberto['vrad'],marker='o',ls='',zorder=0)
+    scatter(data_Umberto['jdb'],data_Umberto['vrad'],c=data_DRS['sn50'],zorder=1)
+    ylabel('SN RV [m/s]')
+    xlabel('JD - 2400000 [d]')
+    cb=colorbar()
+    cb.set_label('SNR order 50')
+    subplot(313)
+    perio = functions.compute_periodogram_new(data_DRS['jdb'],data_DRS['vrad'],data_DRS['svrad'],ofac=4,min_P=1.1)
+    semilogx(1./perio[0],perio[1])
+    ylabel('Normalized Power')
+    xlabel('Period [d]')
 
     figure()
     para = ['vrad','bis_span']
@@ -69,59 +130,63 @@ for star in stars:
     m,n = data_Pedro[para[0]],data_Pedro['Vspan']
     o,p = data_Pedro[para[0]],data_Pedro[para[1]]
     subplot(331)
-    title('SN BIS %s' % star)
-    plot(a,b,'o',label='SN R=%.2f' % corrcoef(a,b)[0][1])
+    plot(a,b,'o',label='SNR=%.2f' % corrcoef(a,b)[0][1])
+    ylabel('SN BIS [m/s]')
+    xlabel('SN RV [m/s]')
     legend()
     subplot(332)
-    title('DRS BIS')
-    plot(c,d,'o',label='SN R=%.2f' % corrcoef(c,d)[0][1])
+    title(star)
+    plot(c,d,'o',label='SNR=%.2f' % corrcoef(c,d)[0][1])
+    ylabel('DRS BIS [m/s]')
+    xlabel('RV [m/s]')
     legend()
     subplot(333)
-    title('FIGUEIRA BIS-')
-    plot(e,f,'o',label='SN R=%.2f' % corrcoef(e,f)[0][1])
+    plot(e,f,'o',label='SNR=%.2f' % corrcoef(e,f)[0][1])
+    ylabel('FIGUEIRA BIS- [m/s]')
+    xlabel('RV [m/s]')
     legend()
     subplot(334)
-    title('FIGUEIRA BIS+')
-    plot(g,h,'o',label='SN R=%.2f' % corrcoef(g,h)[0][1])
+    ylabel('FIGUEIRA BIS+ [m/s]')
+    xlabel('RV [m/s]')
+    plot(g,h,'o',label='SNR=%.2f' % corrcoef(g,h)[0][1])
     legend()
     subplot(335)
-    title('FIGUEIRA biGauss')
-    plot(i,j,'o',label='SN R=%.2f' % corrcoef(i,j)[0][1])
+    ylabel('FIGUEIRA biGauss [m/s]')
+    plot(i,j,'o',label='SNR=%.2f' % corrcoef(i,j)[0][1])
+    xlabel('RV [m/s]')
     legend()
     subplot(336)
-    title('FIGUEIRA Vasy')
-    plot(k,l,'o',label='SN R=%.2f' % corrcoef(k,l)[0][1])
+    ylabel('FIGUEIRA Vasy [m/s]')
+    plot(k,l,'o',label='SNR=%.2f' % corrcoef(k,l)[0][1])
+    xlabel('RV [m/s]')
     legend()
     subplot(337)
-    title('FIGUEIRA Vspan')
-    plot(m,n,'o',label='SN R=%.2f' % corrcoef(m,n)[0][1])
+    ylabel('FIGUEIRA Vspan [m/s]')
+    plot(m,n,'o',label='SNR=%.2f' % corrcoef(m,n)[0][1])
+    xlabel('RV [m/s]')
     legend()
-#    subplot(338)
-#    title('FIGUEIRA BIS')
-#    plot(o,p,'o',label='SN R=%.2f' % corrcoef(o,p)[0][1])
-#    legend()
 
-    savefig('../figures/skew_normal/Comparison_BIS_%s.pdf' % star)
-
-    figure()
     para = ['vrad','fwhm']
     a,b = data_Umberto[para[0]],data_Umberto[para[1]]
     c,d = data_DRS[para[0]],data_DRS[para[1]]
     e,f = data_Pedro[para[0]],data_Pedro[para[1]]
-    subplot(131)
-    title('SN FWHM %s' % star)
-    plot(a,b,'o',label='SN R=%.2f' % corrcoef(a,b)[0][1])
+    subplot(338)
+    plot(a,b,'o',label='SNR=%.2f' % corrcoef(a,b)[0][1],color='r')
+    ylabel('SN FWHM [m/s]')
+    xlabel('SN RV [m/s]')
     legend()
-    subplot(132)
-    title('DRS FWHM')
-    plot(c,d,'o',label='SN R=%.2f' % corrcoef(c,d)[0][1])
-    legend()
-    subplot(133)
-    title('FIGUEIRA FWHM')
-    plot(e,f,'o',label='SN R=%.2f' % corrcoef(e,f)[0][1])
+    subplot(339)
+    plot(c,d,'o',label='SNR=%.2f' % corrcoef(c,d)[0][1],color='r')
+    ylabel('DRS FWHM [m/s]')
+    xlabel('RV [m/s]')
     legend()
 
-    savefig('../skew_normal/figures/Comparison_FWHM_%s.pdf' % star)
+    subplots_adjust(hspace=0.4,wspace=0.4)
+
+    savefig('../figures/Comparison_para_%s.pdf' % star)
+
+
+
 
 
 
